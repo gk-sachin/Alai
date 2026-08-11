@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vidai — Proposal Review</title>
+<style>
+  :root {
+    --surface-page: #f7f6f3;
+    --surface-card: #ffffff;
+    --surface-muted: #f1f0ec;
+    --border: #e6e3db;
+    --text: #1f1d1a;
+    --text-secondary: #55524a;
+    --text-muted: #8a8678;
+    --red: #d64545;
+    --red-bg: #fbeaea;
+    --green: #2f8f4e;
+    --green-bg: #eaf6ee;
+    --green-text: #1f6e38;
+    --saffron: #d99a2b;
+    --saffron-bg: #fbf1de;
+    --saffron-text: #8a5f11;
+    --radius: 10px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--surface-page);
+    color: var(--text);
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 18px 100px; }
+
+  /* ---------- header ---------- */
+  .page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; }
+  .brand-mark { width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg, var(--saffron), var(--red)); }
+  .phase-pill {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 6px 13px; border-radius: var(--radius-pill);
+    background: var(--saffron-bg); color: var(--saffron-text);
+  }
+  .phase-pill.phase2 { background: var(--green-bg); color: var(--green-text); }
+
+  .progress-track { height: 5px; background: var(--surface-muted); border-radius: var(--radius-pill); overflow: hidden; margin-bottom: 26px; }
+  .progress-fill { height: 100%; background: var(--saffron); transition: width 0.25s ease; }
+  .progress-fill.phase2 { background: var(--green); }
+
+  /* ---------- gate screen ---------- */
+  .gate-card {
+    background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 40px 32px; text-align: center; margin-top: 60px;
+  }
+  .gate-card h1 { font-size: 20px; margin: 0 0 8px; }
+  .gate-card p { color: var(--text-secondary); font-size: 14px; margin: 0 0 24px; }
+  .gate-field { text-align: left; margin-bottom: 14px; }
+  .gate-field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+  .gate-field input {
+    width: 100%; font-family: inherit; font-size: 14px; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .gate-error { color: var(--red); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
+
+  /* ---------- loading / status ---------- */
+  .status-screen { text-align: center; color: var(--text-muted); font-size: 13.5px; margin-top: 80px; }
+
+  /* ---------- comparison ---------- */
+  .comparison-title { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+  .comparison-sub { font-size: 12.5px; color: var(--text-muted); margin: 0 0 18px; }
+
+  .pair-block { margin-bottom: 18px; }
+  .pair-caption { font-size: 11.5px; color: var(--text-muted); margin-bottom: 6px; text-align: center; }
+  .galleries { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 680px) { .galleries { grid-template-columns: 1fr; } }
+
+  .gallery {
+    background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .gallery.before-g { border-top: 4px solid var(--text-muted); }
+  .gallery.proposal-g { border-top: 4px solid var(--saffron); }
+  .gallery.after-g { border-top: 4px solid var(--green); }
+  .gallery-label { padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-muted); }
+
+  .gallery-main { padding: 6px 14px 14px; }
+  .gallery-main img {
+    width: 100%; height: auto; max-height: 460px; object-fit: contain;
+    border-radius: 8px; cursor: zoom-in; background: var(--surface-muted); display: block;
+  }
+  .gallery-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 200px; color: var(--text-muted); font-size: 13px; gap: 8px; text-align: center; padding: 20px;
+  }
+
+  /* ---------- decision controls ---------- */
+  .decision-row {
+    display: flex; gap: 10px; justify-content: center; margin: 22px 0 14px; flex-wrap: wrap;
+  }
+  .decide-btn {
+    font-family: inherit; font-size: 14px; font-weight: 700; padding: 12px 26px;
+    border-radius: var(--radius-pill); border: 1.5px solid var(--border); background: var(--surface-card);
+    cursor: pointer; color: var(--text);
+  }
+  .decide-btn.approve.active { background: var(--green-bg); border-color: var(--green); color: var(--green-text); }
+  .decide-btn.reject.active { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .decide-btn:hover { border-color: var(--text-muted); }
+
+  .comment-box {
+    display: block; width: 100%; max-width: 640px; margin: 0 auto; font-family: inherit;
+    font-size: 13.5px; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius);
+    resize: vertical; min-height: 64px;
+  }
+  .comment-label { display: block; text-align: center; font-size: 11.5px; color: var(--text-muted); margin: 4px 0 6px; }
+
+  .save-note { text-align: center; font-size: 11.5px; color: var(--text-muted); margin-top: 8px; min-height: 15px; }
+
+  /* ---------- footer nav ---------- */
+  .footer-nav { position: fixed; right: 22px; bottom: 22px; display: flex; gap: 10px; z-index: 20; }
+  .nav-btn {
+    font-family: inherit; font-size: 13.5px; font-weight: 700; padding: 13px 22px;
+    border-radius: var(--radius-pill); cursor: pointer; border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+  }
+  .nav-btn.back { background: var(--surface-card); color: var(--text); border: 1px solid var(--border); }
+  .nav-btn.next { background: var(--text); color: #fff; }
+  .nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .top-actions { position: fixed; right: 22px; top: 18px; z-index: 20; display: flex; gap: 8px; }
+  .pdf-btn {
+    font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 9px 16px;
+    border-radius: var(--radius-pill); border: 1px solid var(--border); background: var(--surface-card);
+    cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+
+  /* ---------- lightbox ---------- */
+  .lightbox {
+    position: fixed; inset: 0; background: rgba(20,18,15,0.92); display: none;
+    align-items: center; justify-content: center; z-index: 50; padding: 30px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
+  .lightbox-close { position: absolute; top: 20px; right: 26px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
+
+  /* ---------- done screen ---------- */
+  .done-card {
+    background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 50px 30px; text-align: center; margin-top: 60px;
+  }
+  .done-card h1 { font-size: 22px; margin: 0 0 10px; }
+  .done-card p { color: var(--text-secondary); font-size: 14px; }
+
+  /* ---------- print view ---------- */
+  #print-view { display: none; }
+  @media print {
+    body * { visibility: hidden; }
+    #print-view, #print-view * { visibility: visible; }
+    #print-view { display: block; position: absolute; top: 0; left: 0; width: 100%; }
+    .print-item { break-inside: avoid; padding: 18px 0; border-bottom: 1px solid #ddd; }
+    .print-item h3 { margin: 0 0 4px; font-size: 15px; }
+    .print-item .print-decision { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+    .print-item .print-decision.approved { color: #1f6e38; }
+    .print-item .print-decision.rejected { color: #d64545; }
+    .print-item .print-comment { font-size: 12px; color: #555; margin-bottom: 8px; }
+    .print-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+    .print-grid img { width: 100%; border-radius: 4px; }
+    .print-grid .cap { font-size: 10px; color: #888; text-align: center; margin-top: 3px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app-wrap">
+  <div class="page-header">
+    <div class="brand"><div class="brand-mark"></div><span id="brand-label">Vidai — Proposal Review</span></div>
+    <span class="phase-pill" id="phase-pill">Getting started</span>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  <div id="content"></div>
+</div>
+
+<div class="top-actions" id="top-actions" style="display:none;">
+  <button class="pdf-btn" id="pdf-btn">⬇ Download PDF</button>
+</div>
+
+<div class="footer-nav" id="footer-nav" style="display:none;">
+  <button class="nav-btn back" id="back-btn">← Back</button>
+  <button class="nav-btn next" id="next-btn">Next →</button>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightbox-close">&times;</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<div id="print-view"></div>
+
+<script>
+/* =========================================================================
+   CONFIGURE ME
+   ========================================================================= */
+  window.CONFIG = {
+    githubOwner: "YOUR-GITHUB-USERNAME",
+    githubRepo: "YOUR-REPO-NAME",
+    githubBranch: "main",
+    beforeFolder: "Before",       // baseline / current-state images
+    proposalFolder: "Proposal",   // proposed-change images — Phase 1
+    afterFolder: "After",         // final images — Phase 2 (approved only)
+    appsScriptUrl: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE",
+    accessCode: "",               // leave blank to skip the access-code check
+    clientLabel: "Vidai — Proposal Review"
+  };
+/* ========================================================================= */
+
+  const IMG_EXT = /\.(png|jpe?g|webp|gif)$/i;
+  const content = document.getElementById("content");
+  const phasePill = document.getElementById("phase-pill");
+  const progressFill = document.getElementById("progress-fill");
+  const footerNav = document.getElementById("footer-nav");
+  const backBtn = document.getElementById("back-btn");
+  const nextBtn = document.getElementById("next-btn");
+  const topActions = document.getElementById("top-actions");
+  const pdfBtn = document.getElementById("pdf-btn");
+  const brandLabel = document.getElementById("brand-label");
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = document.getElementById("lightbox-img");
+  const lightboxClose = document.getElementById("lightbox-close");
+
+  brandLabel.textContent = CONFIG.clientLabel;
+
+  let state = {
+    clientName: "",
+    phase: "gate",       // gate | loading | phase1 | phase2 | done
+    comparisons: [],      // { title, beforeImages, proposalImages, afterImages, decision, comment }
+    approvedTitles: [],
+    currentIndex: 0
+  };
+
+  function naturalSort(a, b) {
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  async function gh(path) {
+    // Encode each path segment individually — encoding the whole path at once
+    // turns "/" into "%2F", which breaks GitHub's contents API for subfolders.
+    const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+    const url = `https://api.github.com/repos/${CONFIG.githubOwner}/${CONFIG.githubRepo}/contents/${encodedPath}?ref=${CONFIG.githubBranch}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`GitHub API request failed for "${path}":`, res.status, await res.text().catch(() => ""));
+      return [];
+    }
+    return res.json();
+  }
+
+  async function loadFolderImages(path) {
+    const items = await gh(path);
+    if (!Array.isArray(items)) return [];
+    return items
+      .filter(i => i.type === "file" && IMG_EXT.test(i.name))
+      .sort((a, b) => naturalSort(a.name, b.name))
+      .map(i => ({ name: i.name, url: i.download_url }));
+  }
+
+  async function listComparisonTitles(rootFolder) {
+    const dirs = await gh(rootFolder);
+    if (!Array.isArray(dirs)) return [];
+    return dirs.filter(i => i.type === "dir").sort((a, b) => naturalSort(a.name, b.name)).map(d => d.name);
+  }
+
+  // Pairs images by exact matching filename. `primary` drives the list order;
+  // any primary image without a match in `secondary` still shows, with the
+  // other side empty.
+  function pairByFilename(primary, secondary) {
+    return primary.map(p => ({
+      left: p,
+      right: secondary.find(s => s.name === p.name) || null
+    }));
+  }
+
+  /* ---------------- Apps Script backend ---------------- */
+  async function fetchDecisions(clientName) {
+    if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl.startsWith("PASTE_")) return [];
+    try {
+      const res = await fetch(`${CONFIG.appsScriptUrl}?clientName=${encodeURIComponent(clientName)}`);
+      return await res.json();
+    } catch (e) { return []; }
+  }
+
+  async function saveDecision(clientName, comparison) {
+    if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl.startsWith("PASTE_")) return;
+    try {
+      await fetch(CONFIG.appsScriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({
+          clientName,
+          comparison: comparison.title,
+          decision: comparison.decision,
+          comment: comparison.comment
+        })
+      });
+    } catch (e) { /* non-fatal */ }
+  }
+
+  /* ---------------- gate screen ---------------- */
+  function renderGate() {
+    phasePill.textContent = "Welcome";
+    progressFill.style.width = "0%";
+    footerNav.style.display = "none";
+    topActions.style.display = "none";
+    content.innerHTML = `
+      <div class="gate-card">
+        <h1>${CONFIG.clientLabel}</h1>
+        <p>Please enter your name to begin reviewing the proposed changes.</p>
+        <div class="gate-field">
+          <label>Your name</label>
+          <input type="text" id="gate-name" placeholder="Jane Smith">
+        </div>
+        ${CONFIG.accessCode ? `
+        <div class="gate-field">
+          <label>Access code</label>
+          <input type="password" id="gate-code" placeholder="Enter the code you were given">
+        </div>` : ""}
+        <button class="nav-btn next" id="gate-start" style="position:static;">Start review</button>
+        <div class="gate-error" id="gate-error"></div>
+      </div>`;
+    document.getElementById("gate-start").addEventListener("click", async () => {
+      const name = document.getElementById("gate-name").value.trim();
+      const errEl = document.getElementById("gate-error");
+      if (!name) { errEl.textContent = "Please enter your name."; return; }
+      if (CONFIG.accessCode) {
+        const code = document.getElementById("gate-code").value.trim();
+        if (code !== CONFIG.accessCode) { errEl.textContent = "That access code isn't correct."; return; }
+      }
+      state.clientName = name;
+      startReview();
+    });
+  }
+
+  /* ---------------- loading ---------------- */
+  function renderLoading(msg) {
+    phasePill.textContent = "Loading";
+    content.innerHTML = `<div class="status-screen">${msg}</div>`;
+  }
+
+  async function startReview() {
+    state.phase = "loading";
+    renderLoading("Loading proposal images…");
+    let titles;
+    try {
+      titles = await listComparisonTitles(CONFIG.proposalFolder);
+    } catch (e) {
+      content.innerHTML = `<div class="status-screen">Couldn't load images from GitHub. Check the repo/folder names in CONFIG and that the repo is public.</div>`;
+      return;
+    }
+    if (titles.length === 0) {
+      content.innerHTML = `<div class="status-screen">No comparisons found in "${CONFIG.proposalFolder}". Add a subfolder per comparison with images inside, then reload.</div>`;
+      return;
+    }
+    state.comparisons = [];
+    for (const title of titles) {
+      const [beforeImages, proposalImages] = await Promise.all([
+        loadFolderImages(`${CONFIG.beforeFolder}/${title}`),
+        loadFolderImages(`${CONFIG.proposalFolder}/${title}`)
+      ]);
+      state.comparisons.push({ title, beforeImages, proposalImages, afterImages: [], decision: null, comment: "" });
+    }
+
+    const prior = await fetchDecisions(state.clientName);
+    prior.forEach(p => {
+      const c = state.comparisons.find(c => c.title === p.comparison);
+      if (c) { c.decision = p.decision; c.comment = p.comment || ""; }
+    });
+
+    const firstUndecided = state.comparisons.findIndex(c => !c.decision);
+    state.currentIndex = firstUndecided === -1 ? 0 : firstUndecided;
+    const allDecided = state.comparisons.every(c => c.decision);
+    if (allDecided) { await enterPhase2(); } else { state.phase = "phase1"; renderPhase1(); }
+  }
+
+  /* ---------------- shared: pair rendering ---------------- */
+  function pairsHTML(pairs, leftLabel, leftClass, rightLabel, rightClass) {
+    return pairs.map(pair => `
+      <div class="pair-block">
+        <div class="galleries">
+          <div class="gallery ${leftClass}">
+            <div class="gallery-label">${leftLabel} — ${escapeHtml(pair.left.name)}</div>
+            <div class="gallery-main">
+              <img src="${pair.left.url}" data-full="${pair.left.url}" class="zoomable">
+            </div>
+          </div>
+          <div class="gallery ${rightClass}">
+            <div class="gallery-label">${rightLabel} — ${pair.right ? escapeHtml(pair.right.name) : escapeHtml(pair.left.name)}</div>
+            <div class="gallery-main">
+              ${pair.right
+                ? `<img src="${pair.right.url}" data-full="${pair.right.url}" class="zoomable">`
+                : `<div class="gallery-empty">Not yet available</div>`}
+            </div>
+          </div>
+        </div>
+      </div>`).join("");
+  }
+
+  function wireZoomables() {
+    content.querySelectorAll(".zoomable").forEach(img => {
+      img.addEventListener("click", () => openLightbox(img.dataset.full));
+    });
+  }
+
+  /* ---------------- phase 1 : Before vs Proposal ---------------- */
+  function renderPhase1() {
+    phasePill.textContent = "Phase 1 · Before vs Proposal";
+    phasePill.className = "phase-pill";
+    progressFill.className = "progress-fill";
+    progressFill.style.width = `${(state.currentIndex / state.comparisons.length) * 100}%`;
+    footerNav.style.display = "flex";
+    topActions.style.display = "flex";
+
+    const c = state.comparisons[state.currentIndex];
+    const n = state.currentIndex + 1;
+    const pairs = pairByFilename(c.proposalImages, c.beforeImages).map(p => ({ left: p.right || p.left, right: p.left }));
+    // left = Before (may be missing), right = Proposal (always present, drives the list)
+    const displayPairs = c.proposalImages.map(propImg => ({
+      left: c.beforeImages.find(b => b.name === propImg.name) || propImg,
+      leftMissing: !c.beforeImages.find(b => b.name === propImg.name),
+      right: propImg
+    }));
+
+    content.innerHTML = `
+      <p class="comparison-sub">Comparison ${n} of ${state.comparisons.length}</p>
+      <h2 class="comparison-title">${escapeHtml(c.title)}</h2>
+      ${displayPairs.map(p => `
+        <div class="pair-block">
+          <div class="galleries">
+            <div class="gallery before-g">
+              <div class="gallery-label">BEFORE — ${escapeHtml(p.right.name)}</div>
+              <div class="gallery-main">
+                ${p.leftMissing
+                  ? `<div class="gallery-empty">No before image found</div>`
+                  : `<img src="${p.left.url}" data-full="${p.left.url}" class="zoomable">`}
+              </div>
+            </div>
+            <div class="gallery proposal-g">
+              <div class="gallery-label">PROPOSAL — ${escapeHtml(p.right.name)}</div>
+              <div class="gallery-main"><img src="${p.right.url}" data-full="${p.right.url}" class="zoomable"></div>
+            </div>
+          </div>
+        </div>`).join("")}
+      <div class="decision-row">
+        <button class="decide-btn approve ${c.decision === "approved" ? "active" : ""}" id="approve-btn">✓ Approve</button>
+        <button class="decide-btn reject ${c.decision === "rejected" ? "active" : ""}" id="reject-btn">✕ Reject</button>
+      </div>
+      <span class="comment-label">Comment / reason (optional)</span>
+      <textarea class="comment-box" id="comment-box" placeholder="Add a note for this comparison...">${escapeHtml(c.comment || "")}</textarea>
+      <div class="save-note" id="save-note"></div>`;
+
+    document.getElementById("approve-btn").addEventListener("click", () => setDecision("approved"));
+    document.getElementById("reject-btn").addEventListener("click", () => setDecision("rejected"));
+    document.getElementById("comment-box").addEventListener("input", (e) => { c.comment = e.target.value; });
+    wireZoomables();
+
+    backBtn.disabled = state.currentIndex === 0;
+    nextBtn.textContent = state.currentIndex === state.comparisons.length - 1 ? "Finish Phase 1 →" : "Next →";
+  }
+
+  function setDecision(d) {
+    const c = state.comparisons[state.currentIndex];
+    c.decision = d;
+    renderPhase1();
+  }
+
+  async function goNextPhase1() {
+    const c = state.comparisons[state.currentIndex];
+    if (!c.decision) {
+      const note = document.getElementById("save-note");
+      note.textContent = "Please choose Approve or Reject before continuing.";
+      note.style.color = "var(--red)";
+      return;
+    }
+    const note = document.getElementById("save-note");
+    note.style.color = "var(--text-muted)";
+    note.textContent = "Saving...";
+    await saveDecision(state.clientName, c);
+    note.textContent = "Saved.";
+    if (state.currentIndex < state.comparisons.length - 1) {
+      state.currentIndex++;
+      renderPhase1();
+    } else {
+      await enterPhase2();
+    }
+  }
+
+  function goBackPhase1() {
+    if (state.currentIndex > 0) { state.currentIndex--; renderPhase1(); }
+  }
+
+  /* ---------------- phase 2 : Before vs After (approved only) ---------------- */
+  async function enterPhase2() {
+    // Rejected comparisons are fully excluded from here onward.
+    const approved = state.comparisons.filter(c => c.decision === "approved");
+    state.approvedTitles = approved.map(c => c.title);
+    if (state.approvedTitles.length === 0) {
+      renderDone("No comparisons were approved, so there's nothing to compare in this phase.");
+      return;
+    }
+    state.phase = "loading";
+    renderLoading("Loading after images for approved comparisons…");
+    for (const c of approved) {
+      c.afterImages = await loadFolderImages(`${CONFIG.afterFolder}/${c.title}`);
+    }
+    state.currentIndex = 0;
+    state.phase = "phase2";
+    renderPhase2();
+  }
+
+  function renderPhase2() {
+    phasePill.textContent = "Phase 2 · Before vs After";
+    phasePill.className = "phase-pill phase2";
+    progressFill.className = "progress-fill phase2";
+    progressFill.style.width = `${(state.currentIndex / state.approvedTitles.length) * 100}%`;
+    footerNav.style.display = "flex";
+    topActions.style.display = "flex";
+
+    const title = state.approvedTitles[state.currentIndex];
+    const c = state.comparisons.find(c => c.title === title);
+    const n = state.currentIndex + 1;
+
+    // Before drives the list here — After may not be uploaded yet.
+    const pairs = c.beforeImages.map(bImg => ({
+      before: bImg,
+      after: c.afterImages.find(a => a.name === bImg.name) || null
+    }));
+
+    content.innerHTML = `
+      <p class="comparison-sub">Approved comparison ${n} of ${state.approvedTitles.length}</p>
+      <h2 class="comparison-title">${escapeHtml(title)}</h2>
+      ${pairs.map(p => `
+        <div class="pair-block">
+          <div class="galleries">
+            <div class="gallery before-g">
+              <div class="gallery-label">BEFORE — ${escapeHtml(p.before.name)}</div>
+              <div class="gallery-main"><img src="${p.before.url}" data-full="${p.before.url}" class="zoomable"></div>
+            </div>
+            <div class="gallery after-g">
+              <div class="gallery-label">AFTER — ${escapeHtml(p.before.name)}</div>
+              <div class="gallery-main">
+                ${p.after
+                  ? `<img src="${p.after.url}" data-full="${p.after.url}" class="zoomable">`
+                  : `<div class="gallery-empty">Not yet uploaded</div>`}
+              </div>
+            </div>
+          </div>
+        </div>`).join("")}`;
+
+    wireZoomables();
+    backBtn.disabled = state.currentIndex === 0;
+    nextBtn.textContent = state.currentIndex === state.approvedTitles.length - 1 ? "Finish →" : "Next →";
+  }
+
+  function goNextPhase2() {
+    if (state.currentIndex < state.approvedTitles.length - 1) {
+      state.currentIndex++; renderPhase2();
+    } else {
+      renderDone("Thanks for reviewing! Your feedback has been recorded.");
+    }
+  }
+  function goBackPhase2() {
+    if (state.currentIndex > 0) { state.currentIndex--; renderPhase2(); }
+  }
+
+  /* ---------------- done ---------------- */
+  function renderDone(msg) {
+    state.phase = "done";
+    phasePill.textContent = "Complete";
+    progressFill.style.width = "100%";
+    footerNav.style.display = "none";
+    content.innerHTML = `<div class="done-card"><h1>All done</h1><p>${msg}</p></div>`;
+  }
+
+  function openLightbox(src) {
+    lightboxImg.src = src;
+    lightbox.classList.add("open");
+  }
+  lightboxClose.addEventListener("click", () => lightbox.classList.remove("open"));
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.classList.remove("open"); });
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  /* ---------------- nav wiring ---------------- */
+  backBtn.addEventListener("click", () => {
+    if (state.phase === "phase1") goBackPhase1();
+    else if (state.phase === "phase2") goBackPhase2();
+  });
+  nextBtn.addEventListener("click", () => {
+    if (state.phase === "phase1") goNextPhase1();
+    else if (state.phase === "phase2") goNextPhase2();
+  });
+
+  /* ---------------- PDF export ---------------- */
+  pdfBtn.addEventListener("click", () => {
+    const printView = document.getElementById("print-view");
+    if (state.phase === "phase1") {
+      printView.innerHTML = state.comparisons.map(c => {
+        const pairs = c.proposalImages.map(propImg => ({
+          before: c.beforeImages.find(b => b.name === propImg.name) || null,
+          proposal: propImg
+        }));
+        return `
+          <div class="print-item">
+            <h3>${escapeHtml(c.title)}</h3>
+            <div class="print-decision ${c.decision || ""}">${c.decision ? c.decision.toUpperCase() : "PENDING"}</div>
+            ${c.comment ? `<div class="print-comment">"${escapeHtml(c.comment)}"</div>` : ""}
+            ${pairs.map(p => `
+              <div class="print-grid">
+                <div>${p.before ? `<img src="${p.before.url}">` : ""}<div class="cap">Before — ${p.before ? escapeHtml(p.before.name) : "n/a"}</div></div>
+                <div><img src="${p.proposal.url}"><div class="cap">Proposal — ${escapeHtml(p.proposal.name)}</div></div>
+              </div>`).join("")}
+          </div>`;
+      }).join("");
+    } else if (state.phase === "phase2") {
+      printView.innerHTML = state.approvedTitles.map(title => {
+        const c = state.comparisons.find(c => c.title === title);
+        const pairs = c.beforeImages.map(b => ({ before: b, after: c.afterImages.find(a => a.name === b.name) || null }));
+        return `
+          <div class="print-item">
+            <h3>${escapeHtml(title)}</h3>
+            ${pairs.map(p => `
+              <div class="print-grid">
+                <div><img src="${p.before.url}"><div class="cap">Before — ${escapeHtml(p.before.name)}</div></div>
+                <div>${p.after ? `<img src="${p.after.url}">` : ""}<div class="cap">After — ${p.after ? escapeHtml(p.after.name) : "not yet uploaded"}</div></div>
+              </div>`).join("")}
+          </div>`;
+      }).join("");
+    }
+    window.print();
+  });
+
+  renderGate();
+</script>
+</body>
+</html>
