@@ -91,9 +91,10 @@
 
   .gallery-main { padding: 6px 14px 14px; }
   .gallery-main img {
-    width: 100%; height: auto; max-height: 460px; object-fit: contain;
+    width: 100%; height: auto; max-height: 78vh; object-fit: contain;
     border-radius: 8px; cursor: zoom-in; background: var(--surface-muted); display: block;
   }
+  @media (max-width: 680px) { .gallery-main img { max-height: 52vh; } }
   .gallery-empty {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 200px; color: var(--text-muted); font-size: 13px; gap: 8px; text-align: center; padding: 20px;
@@ -140,12 +141,29 @@
 
   /* ---------- lightbox ---------- */
   .lightbox {
-    position: fixed; inset: 0; background: rgba(20,18,15,0.92); display: none;
-    align-items: center; justify-content: center; z-index: 50; padding: 30px;
+    position: fixed; inset: 0; background: rgba(12,11,9,0.96); display: none;
+    align-items: center; justify-content: center; z-index: 50; padding: 0;
+    overflow: auto;
   }
   .lightbox.open { display: flex; }
-  .lightbox img { max-width: 100%; max-height: 100%; border-radius: 6px; }
-  .lightbox-close { position: absolute; top: 20px; right: 26px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
+  .lightbox-inner { min-height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; padding: 44px 20px; }
+  .lightbox img {
+    max-width: 96vw; max-height: 92vh; width: auto; height: auto;
+    border-radius: 6px; cursor: zoom-in; transition: max-width 0.15s ease, max-height 0.15s ease;
+  }
+  .lightbox img.full-res {
+    max-width: none; max-height: none; cursor: zoom-out;
+  }
+  .lightbox-close {
+    position: fixed; top: 18px; right: 22px; color: #fff; font-size: 30px;
+    cursor: pointer; background: rgba(255,255,255,0.1); border: none;
+    width: 42px; height: 42px; border-radius: 50%; line-height: 1; z-index: 51;
+  }
+  .lightbox-hint {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.7); font-size: 12px; z-index: 51;
+    background: rgba(255,255,255,0.08); padding: 6px 14px; border-radius: 999px;
+  }
 
   /* ---------- done screen ---------- */
   .done-card {
@@ -195,7 +213,10 @@
 
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightbox-close">&times;</button>
-  <img id="lightbox-img" src="" alt="">
+  <div class="lightbox-inner">
+    <img id="lightbox-img" src="" alt="">
+  </div>
+  <div class="lightbox-hint">Click image to zoom to full resolution · click again to fit screen</div>
 </div>
 
 <div id="print-view"></div>
@@ -236,7 +257,9 @@
   let state = {
     clientName: "",
     phase: "gate",       // gate | loading | phase1 | phase2 | done
-    comparisons: [],      // { title, beforeImages, proposalImages, afterImages, decision, comment }
+    comparisons: [],      // { title, beforeImages, proposalImages, afterImages, decision, comment } — need Approve/Reject
+    beforeOnlyComparisons: [], // titles with Before only, no Proposal — auto-routed to Phase 2
+    phase2Comparisons: [], // combined approved + beforeOnly, used while in phase 2
     approvedTitles: [],
     currentIndex: 0
   };
@@ -351,25 +374,38 @@
 
   async function startReview() {
     state.phase = "loading";
-    renderLoading("Loading proposal images…");
-    let titles;
+    renderLoading("Loading comparisons…");
+    let beforeTitles, proposalTitles;
     try {
-      titles = await listComparisonTitles(CONFIG.proposalFolder);
+      [beforeTitles, proposalTitles] = await Promise.all([
+        listComparisonTitles(CONFIG.beforeFolder),
+        listComparisonTitles(CONFIG.proposalFolder)
+      ]);
     } catch (e) {
       content.innerHTML = `<div class="status-screen">Couldn't load images from GitHub. Check the repo/folder names in CONFIG and that the repo is public.</div>`;
       return;
     }
-    if (titles.length === 0) {
-      content.innerHTML = `<div class="status-screen">No comparisons found in "${CONFIG.proposalFolder}". Add a subfolder per comparison with images inside, then reload.</div>`;
+    // Union of every title folder found under Before/ and Proposal/, naturally sorted.
+    const allTitles = Array.from(new Set([...beforeTitles, ...proposalTitles])).sort(naturalSort);
+    if (allTitles.length === 0) {
+      content.innerHTML = `<div class="status-screen">No comparisons found. Add a subfolder per comparison under "${CONFIG.beforeFolder}" (and "${CONFIG.proposalFolder}" if it needs review), then reload.</div>`;
       return;
     }
-    state.comparisons = [];
-    for (const title of titles) {
+
+    state.comparisons = [];        // titles that have a Proposal — need Approve/Reject in Phase 1
+    state.beforeOnlyComparisons = []; // titles with Before only, no Proposal — auto-routed to Before vs After
+
+    for (const title of allTitles) {
       const [beforeImages, proposalImages] = await Promise.all([
         loadFolderImages(`${CONFIG.beforeFolder}/${title}`),
         loadFolderImages(`${CONFIG.proposalFolder}/${title}`)
       ]);
-      state.comparisons.push({ title, beforeImages, proposalImages, afterImages: [], decision: null, comment: "" });
+      if (proposalImages.length > 0) {
+        state.comparisons.push({ title, beforeImages, proposalImages, afterImages: [], decision: null, comment: "" });
+      } else if (beforeImages.length > 0) {
+        // No proposal to review — skip Phase 1 entirely for this title.
+        state.beforeOnlyComparisons.push({ title, beforeImages, proposalImages: [], afterImages: [], decision: "approved", comment: "(no proposal — sent straight to Before vs After)" });
+      }
     }
 
     const prior = await fetchDecisions(state.clientName);
@@ -377,6 +413,12 @@
       const c = state.comparisons.find(c => c.title === p.comparison);
       if (c) { c.decision = p.decision; c.comment = p.comment || ""; }
     });
+
+    if (state.comparisons.length === 0) {
+      // Nothing needs Approve/Reject — every title is Before-only.
+      await enterPhase2();
+      return;
+    }
 
     const firstUndecided = state.comparisons.findIndex(c => !c.decision);
     state.currentIndex = firstUndecided === -1 ? 0 : firstUndecided;
@@ -503,15 +545,19 @@
   /* ---------------- phase 2 : Before vs After (approved only) ---------------- */
   async function enterPhase2() {
     // Rejected comparisons are fully excluded from here onward.
+    // Approved (reviewed) titles + Before-only titles (never needed review) both carry forward.
     const approved = state.comparisons.filter(c => c.decision === "approved");
-    state.approvedTitles = approved.map(c => c.title);
+    const combined = [...approved, ...state.beforeOnlyComparisons];
+    // Keep a single lookup list so renderPhase2 can find either kind by title.
+    state.phase2Comparisons = combined;
+    state.approvedTitles = combined.map(c => c.title);
     if (state.approvedTitles.length === 0) {
       renderDone("No comparisons were approved, so there's nothing to compare in this phase.");
       return;
     }
     state.phase = "loading";
-    renderLoading("Loading after images for approved comparisons…");
-    for (const c of approved) {
+    renderLoading("Loading after images…");
+    for (const c of combined) {
       c.afterImages = await loadFolderImages(`${CONFIG.afterFolder}/${c.title}`);
     }
     state.currentIndex = 0;
@@ -528,7 +574,7 @@
     topActions.style.display = "flex";
 
     const title = state.approvedTitles[state.currentIndex];
-    const c = state.comparisons.find(c => c.title === title);
+    const c = state.phase2Comparisons.find(c => c.title === title);
     const n = state.currentIndex + 1;
 
     // Before drives the list here — After may not be uploaded yet.
@@ -585,10 +631,18 @@
 
   function openLightbox(src) {
     lightboxImg.src = src;
+    lightboxImg.classList.remove("full-res");
     lightbox.classList.add("open");
+    lightbox.scrollTop = 0;
+    lightbox.scrollLeft = 0;
   }
+  lightboxImg.addEventListener("click", (e) => {
+    e.stopPropagation();
+    lightboxImg.classList.toggle("full-res");
+  });
   lightboxClose.addEventListener("click", () => lightbox.classList.remove("open"));
-  lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.classList.remove("open"); });
+  lightbox.addEventListener("click", (e) => { if (e.target === lightbox || e.target.classList.contains("lightbox-inner")) lightbox.classList.remove("open"); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") lightbox.classList.remove("open"); });
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -627,7 +681,7 @@
       }).join("");
     } else if (state.phase === "phase2") {
       printView.innerHTML = state.approvedTitles.map(title => {
-        const c = state.comparisons.find(c => c.title === title);
+        const c = state.phase2Comparisons.find(c => c.title === title);
         const pairs = c.beforeImages.map(b => ({ before: b, after: c.afterImages.find(a => a.name === b.name) || null }));
         return `
           <div class="print-item">
