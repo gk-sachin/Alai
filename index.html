@@ -626,6 +626,7 @@
     phasePill.textContent = "Complete";
     progressFill.style.width = "100%";
     footerNav.style.display = "none";
+    topActions.style.display = "flex";
     content.innerHTML = `<div class="done-card"><h1>All done</h1><p>${msg}</p></div>`;
   }
 
@@ -693,6 +694,46 @@
               </div>`).join("")}
           </div>`;
       }).join("");
+    } else if (state.phase === "done") {
+      // Full summary: every Phase 1 decision (with comments) followed by
+      // every Phase 2 Before/After pair — covers both approved-with-review
+      // and before-only items that skipped straight to Phase 2.
+      const phase1Html = state.comparisons.length ? state.comparisons.map(c => {
+        const pairs = c.proposalImages.map(propImg => ({
+          before: c.beforeImages.find(b => b.name === propImg.name) || null,
+          proposal: propImg
+        }));
+        return `
+          <div class="print-item">
+            <h3>${escapeHtml(c.title)}</h3>
+            <div class="print-decision ${c.decision || ""}">${c.decision ? c.decision.toUpperCase() : "PENDING"}</div>
+            ${c.comment ? `<div class="print-comment">"${escapeHtml(c.comment)}"</div>` : ""}
+            ${pairs.map(p => `
+              <div class="print-grid">
+                <div>${p.before ? `<img src="${p.before.url}">` : ""}<div class="cap">Before — ${p.before ? escapeHtml(p.before.name) : "n/a"}</div></div>
+                <div><img src="${p.proposal.url}"><div class="cap">Proposal — ${escapeHtml(p.proposal.name)}</div></div>
+              </div>`).join("")}
+          </div>`;
+      }).join("") : "<p>No proposal comparisons were reviewed.</p>";
+
+      const phase2Html = state.phase2Comparisons.length ? state.phase2Comparisons.map(c => {
+        const pairs = c.beforeImages.map(b => ({ before: b, after: (c.afterImages || []).find(a => a.name === b.name) || null }));
+        return `
+          <div class="print-item">
+            <h3>${escapeHtml(c.title)} — Before vs After</h3>
+            ${pairs.map(p => `
+              <div class="print-grid">
+                <div><img src="${p.before.url}"><div class="cap">Before — ${escapeHtml(p.before.name)}</div></div>
+                <div>${p.after ? `<img src="${p.after.url}">` : ""}<div class="cap">After — ${p.after ? escapeHtml(p.after.name) : "not yet uploaded"}</div></div>
+              </div>`).join("")}
+          </div>`;
+      }).join("") : "<p>No approved comparisons reached Before/After.</p>";
+
+      printView.innerHTML = `
+        <h2 style="margin:0 0 10px;">Phase 1 — Before vs Proposal</h2>
+        ${phase1Html}
+        <h2 style="margin:24px 0 10px;">Phase 2 — Before vs After</h2>
+        ${phase2Html}`;
     }
     window.print();
   });
