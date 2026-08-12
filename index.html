@@ -221,6 +221,7 @@
 
 <div id="print-view"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
 /* =========================================================================
    CONFIGURE ME
@@ -534,6 +535,8 @@
       state.currentIndex++;
       renderPhase1();
     } else {
+      note.textContent = "Saved. Preparing Phase 1 PDF…";
+      await autoUploadPdf("phase1");
       await enterPhase2();
     }
   }
@@ -609,10 +612,12 @@
     nextBtn.textContent = state.currentIndex === state.approvedTitles.length - 1 ? "Finish →" : "Next →";
   }
 
-  function goNextPhase2() {
+  async function goNextPhase2() {
     if (state.currentIndex < state.approvedTitles.length - 1) {
       state.currentIndex++; renderPhase2();
     } else {
+      renderLoading("Preparing Phase 2 PDF…");
+      await autoUploadPdf("phase2");
       renderDone("Thanks for reviewing! Your feedback has been recorded.");
     }
   }
@@ -660,83 +665,110 @@
   });
 
   /* ---------------- PDF export ---------------- */
+
+  // Builds the Phase 1 (Before vs Proposal + decision + comment) print HTML.
+  function buildPhase1PrintHtml() {
+    if (!state.comparisons.length) return "<p>No proposal comparisons were reviewed.</p>";
+    return state.comparisons.map(c => {
+      const pairs = c.proposalImages.map(propImg => ({
+        before: c.beforeImages.find(b => b.name === propImg.name) || null,
+        proposal: propImg
+      }));
+      return `
+        <div class="print-item">
+          <h3>${escapeHtml(c.title)}</h3>
+          <div class="print-decision ${c.decision || ""}">${c.decision ? c.decision.toUpperCase() : "PENDING"}</div>
+          ${c.comment ? `<div class="print-comment">"${escapeHtml(c.comment)}"</div>` : ""}
+          ${pairs.map(p => `
+            <div class="print-grid">
+              <div>${p.before ? `<img src="${p.before.url}">` : ""}<div class="cap">Before — ${p.before ? escapeHtml(p.before.name) : "n/a"}</div></div>
+              <div><img src="${p.proposal.url}"><div class="cap">Proposal — ${escapeHtml(p.proposal.name)}</div></div>
+            </div>`).join("")}
+        </div>`;
+    }).join("");
+  }
+
+  // Builds the Phase 2 (Before vs After) print HTML.
+  function buildPhase2PrintHtml() {
+    if (!state.phase2Comparisons.length) return "<p>No approved comparisons reached Before/After.</p>";
+    return state.phase2Comparisons.map(c => {
+      const pairs = c.beforeImages.map(b => ({ before: b, after: (c.afterImages || []).find(a => a.name === b.name) || null }));
+      return `
+        <div class="print-item">
+          <h3>${escapeHtml(c.title)} — Before vs After</h3>
+          ${pairs.map(p => `
+            <div class="print-grid">
+              <div><img src="${p.before.url}"><div class="cap">Before — ${escapeHtml(p.before.name)}</div></div>
+              <div>${p.after ? `<img src="${p.after.url}">` : ""}<div class="cap">After — ${p.after ? escapeHtml(p.after.name) : "not yet uploaded"}</div></div>
+            </div>`).join("")}
+        </div>`;
+    }).join("");
+  }
+
+  // Manual "Download PDF" button — uses the browser print dialog, unchanged.
   pdfBtn.addEventListener("click", () => {
     const printView = document.getElementById("print-view");
     if (state.phase === "phase1") {
-      printView.innerHTML = state.comparisons.map(c => {
-        const pairs = c.proposalImages.map(propImg => ({
-          before: c.beforeImages.find(b => b.name === propImg.name) || null,
-          proposal: propImg
-        }));
-        return `
-          <div class="print-item">
-            <h3>${escapeHtml(c.title)}</h3>
-            <div class="print-decision ${c.decision || ""}">${c.decision ? c.decision.toUpperCase() : "PENDING"}</div>
-            ${c.comment ? `<div class="print-comment">"${escapeHtml(c.comment)}"</div>` : ""}
-            ${pairs.map(p => `
-              <div class="print-grid">
-                <div>${p.before ? `<img src="${p.before.url}">` : ""}<div class="cap">Before — ${p.before ? escapeHtml(p.before.name) : "n/a"}</div></div>
-                <div><img src="${p.proposal.url}"><div class="cap">Proposal — ${escapeHtml(p.proposal.name)}</div></div>
-              </div>`).join("")}
-          </div>`;
-      }).join("");
+      printView.innerHTML = buildPhase1PrintHtml();
     } else if (state.phase === "phase2") {
-      printView.innerHTML = state.approvedTitles.map(title => {
-        const c = state.phase2Comparisons.find(c => c.title === title);
-        const pairs = c.beforeImages.map(b => ({ before: b, after: c.afterImages.find(a => a.name === b.name) || null }));
-        return `
-          <div class="print-item">
-            <h3>${escapeHtml(title)}</h3>
-            ${pairs.map(p => `
-              <div class="print-grid">
-                <div><img src="${p.before.url}"><div class="cap">Before — ${escapeHtml(p.before.name)}</div></div>
-                <div>${p.after ? `<img src="${p.after.url}">` : ""}<div class="cap">After — ${p.after ? escapeHtml(p.after.name) : "not yet uploaded"}</div></div>
-              </div>`).join("")}
-          </div>`;
-      }).join("");
+      printView.innerHTML = buildPhase2PrintHtml();
     } else if (state.phase === "done") {
-      // Full summary: every Phase 1 decision (with comments) followed by
-      // every Phase 2 Before/After pair — covers both approved-with-review
-      // and before-only items that skipped straight to Phase 2.
-      const phase1Html = state.comparisons.length ? state.comparisons.map(c => {
-        const pairs = c.proposalImages.map(propImg => ({
-          before: c.beforeImages.find(b => b.name === propImg.name) || null,
-          proposal: propImg
-        }));
-        return `
-          <div class="print-item">
-            <h3>${escapeHtml(c.title)}</h3>
-            <div class="print-decision ${c.decision || ""}">${c.decision ? c.decision.toUpperCase() : "PENDING"}</div>
-            ${c.comment ? `<div class="print-comment">"${escapeHtml(c.comment)}"</div>` : ""}
-            ${pairs.map(p => `
-              <div class="print-grid">
-                <div>${p.before ? `<img src="${p.before.url}">` : ""}<div class="cap">Before — ${p.before ? escapeHtml(p.before.name) : "n/a"}</div></div>
-                <div><img src="${p.proposal.url}"><div class="cap">Proposal — ${escapeHtml(p.proposal.name)}</div></div>
-              </div>`).join("")}
-          </div>`;
-      }).join("") : "<p>No proposal comparisons were reviewed.</p>";
-
-      const phase2Html = state.phase2Comparisons.length ? state.phase2Comparisons.map(c => {
-        const pairs = c.beforeImages.map(b => ({ before: b, after: (c.afterImages || []).find(a => a.name === b.name) || null }));
-        return `
-          <div class="print-item">
-            <h3>${escapeHtml(c.title)} — Before vs After</h3>
-            ${pairs.map(p => `
-              <div class="print-grid">
-                <div><img src="${p.before.url}"><div class="cap">Before — ${escapeHtml(p.before.name)}</div></div>
-                <div>${p.after ? `<img src="${p.after.url}">` : ""}<div class="cap">After — ${p.after ? escapeHtml(p.after.name) : "not yet uploaded"}</div></div>
-              </div>`).join("")}
-          </div>`;
-      }).join("") : "<p>No approved comparisons reached Before/After.</p>";
-
       printView.innerHTML = `
         <h2 style="margin:0 0 10px;">Phase 1 — Before vs Proposal</h2>
-        ${phase1Html}
+        ${buildPhase1PrintHtml()}
         <h2 style="margin:24px 0 10px;">Phase 2 — Before vs After</h2>
-        ${phase2Html}`;
+        ${buildPhase2PrintHtml()}`;
     }
     window.print();
   });
+
+  // Silently renders a PDF for the given phase and uploads it to Drive via
+  // Apps Script, which drops the shareable link into the client's Sheet row
+  // (PDF Phase 1 / PDF Phase 2 columns). Non-fatal — a failure here never
+  // blocks the client from moving on.
+  async function autoUploadPdf(phase) {
+    if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl.startsWith("PASTE_")) return;
+    if (typeof html2pdf === "undefined") return;
+    const printView = document.getElementById("print-view");
+    const html = phase === "phase2" ? buildPhase2PrintHtml() : buildPhase1PrintHtml();
+    printView.innerHTML = `<h2 style="margin:0 0 10px;">${phase === "phase2" ? "Phase 2 — Before vs After" : "Phase 1 — Before vs Proposal"}</h2>${html}`;
+
+    // #print-view is display:none outside of @media print — force it visible
+    // so html2canvas actually has something to capture.
+    printView.style.display = "block";
+    await new Promise(r => setTimeout(r, 50)); // let layout settle before capture
+
+    try {
+      const filename = `${state.clientName} - ${phase}.pdf`;
+      const opt = {
+        margin: 10,
+        filename,
+        image: { type: "jpeg", quality: 0.92 },
+        html2canvas: { scale: 1.5, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      };
+      const pdfBlob = await html2pdf().set(opt).from(printView).outputPdf("blob");
+      const pdfBase64 = await blobToBase64(pdfBlob);
+      await fetch(CONFIG.appsScriptUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ type: "pdf", clientName: state.clientName, phase, pdfBase64, filename })
+      });
+    } catch (e) {
+      console.warn("PDF auto-upload failed:", e);
+    } finally {
+      printView.style.display = "";
+    }
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
 
   renderGate();
 </script>
