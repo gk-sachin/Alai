@@ -235,7 +235,11 @@
     afterFolder: "After",         // final images — Phase 2 (approved only)
     appsScriptUrl: "https://script.google.com/macros/s/AKfycbxomUYBxBoE-oJc0Q18OdCGsi1F2_Jrd4YBwqPld5owCdbu0KUgLGYWKZW3bYMaNA-WMg/exec",
     accessCode: "",               // leave blank to skip the access-code check
-    clientLabel: "Vidai — Proposal Review"
+    clientLabel: "Vidai — Proposal Review",
+    // Classic GitHub token with NO scopes checked (public-data read only).
+    // Raises the API rate limit from 60/hr to 5,000/hr. Generate at
+    // github.com/settings/tokens → Generate new token (classic) → no scopes.
+    githubToken: "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"
   };
 /* ========================================================================= */
 
@@ -269,14 +273,22 @@
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   }
 
+  let ghRateLimited = false;
+
   async function gh(path) {
     // Encode each path segment individually — encoding the whole path at once
     // turns "/" into "%2F", which breaks GitHub's contents API for subfolders.
     const encodedPath = path.split("/").map(encodeURIComponent).join("/");
     const url = `https://api.github.com/repos/${CONFIG.githubOwner}/${CONFIG.githubRepo}/contents/${encodedPath}?ref=${CONFIG.githubBranch}`;
-    const res = await fetch(url);
+    const headers = { Accept: "application/vnd.github+json" };
+    if (CONFIG.githubToken && !CONFIG.githubToken.startsWith("PASTE_")) {
+      headers.Authorization = `Bearer ${CONFIG.githubToken}`;
+    }
+    const res = await fetch(url, { headers });
     if (!res.ok) {
-      console.warn(`GitHub API request failed for "${path}":`, res.status, await res.text().catch(() => ""));
+      const bodyText = await res.text().catch(() => "");
+      if (res.status === 403 && /rate limit/i.test(bodyText)) ghRateLimited = true;
+      console.warn(`GitHub API request failed for "${path}":`, res.status, bodyText);
       return [];
     }
     return res.json();
@@ -389,7 +401,11 @@
     // Union of every title folder found under Before/ and Proposal/, naturally sorted.
     const allTitles = Array.from(new Set([...beforeTitles, ...proposalTitles])).sort(naturalSort);
     if (allTitles.length === 0) {
-      content.innerHTML = `<div class="status-screen">No comparisons found. Add a subfolder per comparison under "${CONFIG.beforeFolder}" (and "${CONFIG.proposalFolder}" if it needs review), then reload.</div>`;
+      if (ghRateLimited) {
+        content.innerHTML = `<div class="status-screen">GitHub's API rate limit was hit while loading this page. Please try again in a few minutes.</div>`;
+      } else {
+        content.innerHTML = `<div class="status-screen">No comparisons found. Add a subfolder per comparison under "${CONFIG.beforeFolder}" (and "${CONFIG.proposalFolder}" if it needs review), then reload.</div>`;
+      }
       return;
     }
 
